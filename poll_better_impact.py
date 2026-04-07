@@ -71,12 +71,13 @@ def anonymize_name(full_name):
     return full_name
 
 def update_dashboard_json(state, now, api_ok, email_ok):
-    new_apps = 0
-    awaiting_hr = 0
-    awaiting_site = 0
+    new_apps = []
+    awaiting_hr = []
+    awaiting_site = []
     
     users = state.get("users", {})
     for _, info in users.items():
+        name = info.get("name", "Unknown")
         fields = info.get("fields", {})
         reg = fields.get(REGISTRATION_FIELD_NAME, {}).get("value")
         outcome = fields.get(SUPERVISOR_FIELD_NAME, {}).get("value")
@@ -84,11 +85,11 @@ def update_dashboard_json(state, now, api_ok, email_ok):
         site = fields.get(SITE_FIELD_NAME, {}).get("value")
         
         if reg and not outcome:
-            new_apps += 1
+            new_apps.append(name)
         if outcome == "Passed" and not hr:
-            awaiting_hr += 1
+            awaiting_hr.append(name)
         if hr and not site:
-            awaiting_site += 1
+            awaiting_site.append(name)
             
     dash_data = {
         "workflow_status": {
