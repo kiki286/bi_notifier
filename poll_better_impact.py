@@ -78,6 +78,7 @@ def update_dashboard_json(state, now, api_ok, email_ok):
     users = state.get("users", {})
     for _, info in users.items():
         name = info.get("name", "Unknown")
+        anon_name = anonymize_name(name)
         fields = info.get("fields", {})
         reg = fields.get(REGISTRATION_FIELD_NAME, {}).get("value")
         outcome = fields.get(SUPERVISOR_FIELD_NAME, {}).get("value")
@@ -85,11 +86,11 @@ def update_dashboard_json(state, now, api_ok, email_ok):
         site = fields.get(SITE_FIELD_NAME, {}).get("value")
         
         if reg and not outcome:
-            new_apps.append(name)
+            new_apps.append(anon_name)
         if outcome == "Passed" and not hr:
-            awaiting_hr.append(name)
+            awaiting_hr.append(anon_name)
         if hr and not site:
-            awaiting_site.append(name)
+            awaiting_site.append(anon_name)
             
     dash_data = {
         "workflow_status": {
@@ -377,14 +378,19 @@ def main():
         api_ok = False
         volunteers = []
 
+    if not api_ok:
+        print("API offline: Preserving state to prevent data wipe.")
+        update_dashboard_json(state, now, api_ok, email_ok)
+        exit(1)
+
     for user in volunteers:
         if not isinstance(user, dict):
             continue
         user_id   = str(user.get("user_id", ""))
-        full_name = anonymize_name((
+        full_name = (
             f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
             or user.get("name", f"Volunteer {user_id}")
-        ))
+        )
 
         if not user_id:
             continue
