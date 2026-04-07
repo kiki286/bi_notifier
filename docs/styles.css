@@ -111,13 +111,34 @@ body {
     padding: 2rem;
     position: relative;
     overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
     cursor: pointer;
 }
 
 .metric-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 30px -8px rgba(0, 52, 115, 0.2);
+    border-color: var(--kwinana-blue);
+    background-color: #f8fafc;
+}
+
+.metric-card::after {
+    content: 'Click to view \2192';
+    display: block;
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    transition: color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.metric-card:hover::after {
+    color: var(--kwinana-blue);
+    opacity: 1;
+    transform: translateX(4px);
 }
 
 .metric-card::before {
