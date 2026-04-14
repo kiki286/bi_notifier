@@ -1,10 +1,92 @@
+let dashboardData = {};
+let currentPassword = sessionStorage.getItem('dashboard-password') || null;
+
 document.addEventListener('DOMContentLoaded', () => {
-    fetchData();
-    // Refresh data every 5 minutes in background
-    setInterval(fetchData, 5 * 60 * 1000);
+    const authForm = document.getElementById('auth-form');
+    if (authForm) {
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const passInput = document.getElementById('dashboard-password');
+            const submitBtn = authForm.querySelector('button');
+            const errorDiv = document.getElementById('auth-error');
+            
+            errorDiv.innerText = '';
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Decrypting...';
+            
+            currentPassword = passInput.value;
+            const success = await fetchData();
+            
+            if (success) {
+                sessionStorage.setItem('dashboard-password', currentPassword);
+                document.getElementById('auth-overlay').classList.remove('active');
+                document.getElementById('main-dashboard').style.display = 'block';
+            } else {
+                errorDiv.innerText = 'Incorrect password. Decryption failed.';
+                currentPassword = null;
+                sessionStorage.removeItem('dashboard-password');
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Unlock Dashboard';
+            }
+        });
+    }
+
+    fetchData().then(success => {
+        if (success) {
+            document.getElementById('auth-overlay').classList.remove('active');
+            document.getElementById('main-dashboard').style.display = 'block';
+            // Refresh data every 5 minutes in background
+            setInterval(fetchData, 5 * 60 * 1000);
+        }
+    });
 });
 
-let dashboardData = {};
+async function decryptData(encryptedPayload, password) {
+    try {
+        const salt = Uint8Array.from(atob(encryptedPayload.salt), c => c.charCodeAt(0));
+        const iv = Uint8Array.from(atob(encryptedPayload.iv), c => c.charCodeAt(0));
+        const ciphertext = Uint8Array.from(atob(encryptedPayload.ciphertext), c => c.charCodeAt(0));
+        const tag = Uint8Array.from(atob(encryptedPayload.tag), c => c.charCodeAt(0));
+
+        // Combine ciphertext and tag for WebCrypto
+        const data = new Uint8Array(ciphertext.length + tag.length);
+        data.set(ciphertext);
+        data.set(tag, ciphertext.length);
+
+        const encoder = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(password),
+            { name: "PBKDF2" },
+            false,
+            ["deriveKey"]
+        );
+
+        const key = await crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: salt,
+                iterations: 100000,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["decrypt"]
+        );
+
+        const decryptedBuffer = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            key,
+            data
+        );
+
+        const decoder = new TextDecoder();
+        return JSON.parse(decoder.decode(decryptedBuffer));
+    } catch (e) {
+        throw new Error("Decryption failed");
+    }
+}
 
 async function fetchData() {
     try {
@@ -12,12 +94,26 @@ async function fetchData() {
         const res = await fetch(`dashboard.json?t=${timestamp}`);
         if (!res.ok) throw new Error("Dashboard data not found");
         
-        const data = await res.json();
+        let data = await res.json();
+        
+        if (data.encrypted) {
+            if (!currentPassword) return false;
+            try {
+                data = await decryptData(data, currentPassword);
+            } catch (e) {
+                return false;
+            }
+        }
+        
         updateUI(data);
+        return true;
     } catch (err) {
         console.error("Error fetching dashboard data:", err);
-        document.getElementById('api-status-text').innerText = "Disconnected";
-        document.getElementById('api-status-badge').classList.add('error');
+        const textEl = document.getElementById('api-status-text');
+        if (textEl) textEl.innerText = "Disconnected";
+        const badgeEl = document.getElementById('api-status-badge');
+        if (badgeEl) badgeEl.classList.add('error');
+        return false;
     }
 }
 

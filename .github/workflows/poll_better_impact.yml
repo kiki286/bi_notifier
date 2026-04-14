@@ -36,6 +36,7 @@ jobs:
           SMTP_USERNAME:   ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD:   ${{ secrets.SMTP_PASSWORD }}
           NOTIFY_EMAIL:    ${{ secrets.NOTIFY_EMAIL }}
+          STATE_PASSWORD:  ${{ secrets.STATE_PASSWORD }}
         run: python poll_better_impact.py
 
       - name: Commit updated state

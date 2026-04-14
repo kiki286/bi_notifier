@@ -23,12 +23,18 @@ Optional:
 
 import os
 import json
+import base64
 import smtplib
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -58,6 +64,51 @@ STATE_FILE = "state.json"
 
 # Timezone for daily digest scheduling and timestamps
 TZ = ZoneInfo("Australia/Perth")
+
+# ── Encryption & Decryption ───────────────────────────────────────────────────
+
+def get_encryption_key(password: str, salt: bytes):
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    return kdf.derive(password.encode('utf-8'))
+
+def encrypt_data(data_dict, password: str):
+    data_bytes = json.dumps(data_dict).encode('utf-8')
+    salt = os.urandom(16)
+    key = get_encryption_key(password, salt)
+    iv = os.urandom(12)
+    cipher = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(data_bytes) + encryptor.finalize()
+    
+    return {
+        "encrypted": True,
+        "salt": base64.b64encode(salt).decode('utf-8'),
+        "iv": base64.b64encode(iv).decode('utf-8'),
+        "ciphertext": base64.b64encode(ciphertext).decode('utf-8'),
+        "tag": base64.b64encode(encryptor.tag).decode('utf-8')
+    }
+
+def decrypt_data(encrypted_payload, password: str):
+    try:
+        salt = base64.b64decode(encrypted_payload["salt"])
+        iv = base64.b64decode(encrypted_payload["iv"])
+        ciphertext = base64.b64decode(encrypted_payload["ciphertext"])
+        tag = base64.b64decode(encrypted_payload["tag"])
+        
+        key = get_encryption_key(password, salt)
+        cipher = Cipher(algorithms.AES(key), modes.GCM(iv, tag), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
+        return json.loads(decrypted_bytes.decode('utf-8'))
+    except Exception as e:
+        print(f"Decryption failed. Please check your STATE_PASSWORD! Error: {e}")
+        return None
 
 # ── Dashboard Utilities ───────────────────────────────────────────────────────
 
@@ -107,8 +158,15 @@ def update_dashboard_json(state, now, api_ok, email_ok):
     
     docs_dir = os.path.join(os.path.dirname(__file__), "docs")
     os.makedirs(docs_dir, exist_ok=True)
+    
+    password = os.environ.get("STATE_PASSWORD")
+    if password:
+        final_payload = encrypt_data(dash_data, password)
+    else:
+        final_payload = dash_data
+
     with open(os.path.join(docs_dir, "dashboard.json"), "w") as f:
-        json.dump(dash_data, f, indent=2)
+        json.dump(final_payload, f, indent=2)
     print("Dashboard JSON updated.")
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -167,6 +225,18 @@ def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
             data = json.load(f)
+            
+            # Check if state is encrypted
+            if data.get("encrypted"):
+                password = os.environ.get("STATE_PASSWORD")
+                if not password:
+                    print("ERROR: STATE_PASSWORD not set, but state is encrypted. Cannot continue.")
+                    exit(1)
+                decrypted_data = decrypt_data(data, password)
+                if not decrypted_data:
+                    exit(1)
+                data = decrypted_data
+            
             # Migrate old format if necessary
             if "users" not in data:
                 print("Migrating old state format to new format with timestamps.")
@@ -198,8 +268,14 @@ def load_state():
 
 def save_state(state):
     """Save the current state snapshot to state.json."""
+    password = os.environ.get("STATE_PASSWORD")
+    if password:
+        final_payload = encrypt_data(state, password)
+    else:
+        final_payload = state
+        
     with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
+        json.dump(final_payload, f, indent=2)
     print(f"State saved: {len(state.get('users', {}))} volunteers tracked")
 
 # ── Email ─────────────────────────────────────────────────────────────────────

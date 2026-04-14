@@ -8,7 +8,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="dashboard-container">
+    <!-- Password Overlay -->
+    <div id="auth-overlay" class="auth-overlay active">
+        <div class="auth-box">
+            <h2>Dashboard Access</h2>
+            <p>Please enter the dashboard password to decrypt the data.</p>
+            <form id="auth-form">
+                <input type="password" id="dashboard-password" placeholder="Password" required>
+                <button type="submit">Unlock Dashboard</button>
+            </form>
+            <div id="auth-error" class="auth-error"></div>
+        </div>
+    </div>
+
+    <div class="dashboard-container" id="main-dashboard" style="display: none;">
         <header class="dashboard-header">
             <div>
                 <h1>Kwinana Volunteer Dashboard</h1>
