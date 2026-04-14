@@ -16,6 +16,7 @@ Required GitHub Actions secrets:
   SMTP_USERNAME     — sending email address
   SMTP_PASSWORD     — sending email password
   NOTIFY_EMAIL      — supervisor's email address
+  STATE_PASSWORD    — password used to encrypt state.json and dashboard.json
 
 Optional:
   BI_ORG_ID         — your Better Impact organisation ID (if required by your account)
